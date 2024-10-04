@@ -37,6 +37,7 @@ func main() {
 
 }
 
+// confirm the database connection
 func initStorage(db *sql.DB) {
 	err := db.Ping()
 
