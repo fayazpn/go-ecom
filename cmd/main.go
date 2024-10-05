@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 
 	"github.com/fayazpn/ecom/cmd/api"
@@ -29,7 +30,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	server := api.NewAPIServer(":8081", nil)
+	server := api.NewAPIServer(fmt.Sprintf(":%s", config.Envs.Port), db)
 
 	if err := server.Run(); err != nil {
 		log.Fatal(err)

@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -20,7 +21,11 @@ func NewAPIServer(addr string, db *sql.DB) *APIServer {
 
 func (s *APIServer) Run() error {
 	router := mux.NewRouter()
-	subrouter := router.PathPrefix("api/v1").Subrouter()
+
+	// Add a default route
+	router.HandleFunc("/", s.handleDefault).Methods("GET")
+
+	subrouter := router.PathPrefix("/api/v1").Subrouter()
 
 	userStore := user.NewStore(s.db)
 	userHandler := user.NewHandler(userStore)
@@ -29,4 +34,9 @@ func (s *APIServer) Run() error {
 	log.Println("Listening on", s.addr)
 
 	return http.ListenAndServe(s.addr, router)
+}
+
+func (s *APIServer) handleDefault(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Welcome to the API server"})
 }
