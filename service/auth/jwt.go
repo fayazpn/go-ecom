@@ -1,13 +1,23 @@
 package auth
 
 import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
 	"strconv"
 
 	"time"
 
 	"github.com/fayazpn/ecom/config"
+	"github.com/fayazpn/ecom/types"
+	"github.com/fayazpn/ecom/utils"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+type contextKey string
+
+const UserKey contextKey = "userID"
 
 func CreateJWT(secret []byte, userID int) (string, error) {
 	expiration := time.Second * time.Duration(config.Envs.JWTExpirationInSeconds)
@@ -23,4 +33,78 @@ func CreateJWT(secret []byte, userID int) (string, error) {
 	}
 
 	return tokenString, nil
+}
+
+func WithJWTAuth(handlerFunc http.HandlerFunc, store types.UserStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// get the token from the user request
+		tokenString := getTokenFromRequest(r)
+
+		// validate the JWT
+		token, err := validateToken(tokenString)
+		if err != nil {
+			log.Printf("failed to validate the token %v", err)
+			permissionDenied(w)
+			return
+		}
+
+		if !token.Valid {
+			log.Println("invalid token")
+			permissionDenied(w)
+			return
+		}
+
+		// if it is valid JWT, fetch the userID from the DB (we get the id from the token)
+		claims := token.Claims.(jwt.MapClaims)
+		str := claims["userId"].(string)
+
+		userID, _ := strconv.Atoi(str)
+
+		u, err := store.GetUserById(userID)
+		if err != nil {
+			log.Printf("failed to get user by id: %v", err)
+			permissionDenied(w)
+			return
+		}
+
+		// set the context with userID
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, UserKey, u.ID)
+		r = r.WithContext(ctx)
+
+		handlerFunc(w, r)
+	}
+}
+
+func getTokenFromRequest(r *http.Request) string {
+	tokenAuth := r.Header.Get("Authorization")
+
+	if tokenAuth != "" {
+		return tokenAuth
+	}
+
+	return ""
+}
+
+func validateToken(t string) (*jwt.Token, error) {
+	return jwt.Parse(t, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+
+		return []byte(config.Envs.JWTSecret), nil
+	})
+}
+
+func permissionDenied(w http.ResponseWriter) {
+	utils.WriteError(w, http.StatusForbidden, fmt.Errorf("permission denied"))
+}
+
+func GetUserIDFromContext(ctx context.Context) int {
+	userID, ok := ctx.Value(UserKey).(int)
+	if !ok {
+		return -1
+	}
+
+	return userID
 }

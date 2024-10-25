@@ -2,6 +2,8 @@ package product
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"github.com/fayazpn/ecom/types"
 )
@@ -57,6 +59,44 @@ func scanRowIntoProduct(rows *sql.Rows) (*types.Product, error) {
 func (s *Store) CreateProduct(product types.CreateProductPayload) error {
 	// process the payload
 	_, err := s.db.Exec("INSERT INTO products (name, description, image, price, quantity) VALUES (?,?,?,?,?)", product.Name, product.Description, product.Image, product.Price, product.Quantity)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Store) GetProductsByID(productIDs []int) ([]*types.Product, error) {
+	// create comma seperated string for placeholder
+	placeholders := strings.Repeat(",?", len(productIDs)-1)
+	query := fmt.Sprintf("SELECT * FROM products where id IN (?%s)", placeholders)
+
+	// convert productIDs to []interface{}
+	args := make([]interface{}, len(productIDs))
+	for i, v := range productIDs {
+		args[i] = v
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	products := []*types.Product{}
+	for rows.Next() {
+		p, err := scanRowIntoProduct(rows)
+		if err != nil {
+			return nil, err
+		}
+
+		products = append(products, p)
+	}
+	return products, nil
+}
+
+func (s *Store) UpdateProduct(product types.Product) error {
+	_, err := s.db.Exec("UPDATE products SET name = ?, price = ?, image = ?, description = ?, quantity = ? WHERE id = ?", product.Name, product.Price, product.Image, product.Description, product.Quantity, product.ID)
 
 	if err != nil {
 		return err
